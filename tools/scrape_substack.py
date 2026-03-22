@@ -25,3 +25,18 @@ def is_allowed_article_url(candidate_url: str, substack_url: str) -> bool:
     candidate_domain = normalize_domain(parsed.netloc)
     return candidate_domain == allowed_domain and "/p/" in parsed.path
 
+
+def is_retryable_firecrawl_error(message: str) -> bool:
+    lowered = message.lower()
+    retry_markers = [
+        "timeout",
+        "timed out",
+        "rate limit",
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "temporary",
+    ]
+    return any(marker in lowered for marker in retry_markers)
