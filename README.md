@@ -8,3 +8,19 @@ Automates a daily Substack-to-Notion reading workflow:
 - stores local state so previously processed posts are skipped
 
 ## Why This Exists
+
+This project turns a newsletter feed into a personal research queue. It is designed to be reliable enough for unattended scheduled runs while still being simple to inspect and extend.
+
+## Stack
+
+- Python 3.10+
+- Firecrawl CLI for scraping
+- Anthropic Messages API for summarization
+- Notion API for persistence
+
+## Requirements
+
+- Python 3.10 or newer
+- Firecrawl CLI installed and authenticated
+- Anthropic API key
+- Notion API key and target database ID for non-dry runs
