@@ -42,3 +42,16 @@ Respond in exactly this format, with no extra text before or after:
 ## Tags
 [3-5 short topic tags, comma-separated, e.g. AI Strategy, Career, Productivity]
 """
+
+MIN_CONTENT_LENGTH = 200
+FIRECRAWL_ATTEMPTS = 3
+ANTHROPIC_ATTEMPTS = 3
+INITIAL_RETRY_DELAY_SECONDS = 1.0
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+
+MONTH_MAP = {
+    "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+    "may": "05", "jun": "06", "jul": "07", "aug": "08",
+    "sep": "09", "oct": "10", "nov": "11", "dec": "12",
+}
+
