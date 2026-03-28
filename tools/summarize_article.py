@@ -101,3 +101,19 @@ def extract_youtube_url(content: str) -> str:
     )
     return match.group(0) if match else ""
 
+
+def is_retryable_firecrawl_error(message: str) -> bool:
+    lowered = message.lower()
+    retry_markers = [
+        "timeout",
+        "timed out",
+        "rate limit",
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "temporary",
+    ]
+    return any(marker in lowered for marker in retry_markers)
+
