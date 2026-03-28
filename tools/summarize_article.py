@@ -117,3 +117,19 @@ def is_retryable_firecrawl_error(message: str) -> bool:
     ]
     return any(marker in lowered for marker in retry_markers)
 
+
+def should_retry_anthropic_error(exc: Exception) -> bool:
+    if isinstance(
+        exc,
+        (
+            anthropic.APIConnectionError,
+            anthropic.APITimeoutError,
+            anthropic.InternalServerError,
+            anthropic.RateLimitError,
+        ),
+    ):
+        return True
+
+    status_code = getattr(exc, "status_code", None)
+    return status_code in {408, 409, 429, 500, 502, 503, 504}
+
