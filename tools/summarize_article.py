@@ -55,3 +55,20 @@ MONTH_MAP = {
     "sep": "09", "oct": "10", "nov": "11", "dec": "12",
 }
 
+
+def extract_publish_date(content: str) -> str:
+    """
+    Extract the publish date from scraped article content.
+    Returns ISO date string (YYYY-MM-DD) or empty string if not found.
+    """
+    # Match "Feb 26, 2026" or "Mar 4, 2026"
+    match = re.search(
+        r'\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(20\d{2})\b',
+        content, re.IGNORECASE
+    )
+    if match:
+        month = MONTH_MAP[match.group(1).lower()]
+        day = match.group(2).zfill(2)
+        year = match.group(3)
+        return f"{year}-{month}-{day}"
+    return ""
