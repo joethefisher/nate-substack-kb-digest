@@ -176,3 +176,10 @@ def get_article_list(substack_url: str) -> list:
     scrape_data = scrape_substack_index(substack_url)
     articles = parse_articles_from_scrape(scrape_data, substack_url)
 
+    if not articles:
+        raise ValueError(
+            "No articles found in Substack scrape. "
+            "The page structure may have changed or the scrape failed."
+        )
+
+    return articles
