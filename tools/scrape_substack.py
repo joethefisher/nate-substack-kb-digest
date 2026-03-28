@@ -40,3 +40,41 @@ def is_retryable_firecrawl_error(message: str) -> bool:
         "temporary",
     ]
     return any(marker in lowered for marker in retry_markers)
+
+
+def scrape_substack_index(url: str) -> dict:
+    """
+    Run firecrawl scrape on the Substack index page.
+    Returns the parsed JSON output from Firecrawl.
+    Raises RuntimeError if firecrawl exits non-zero.
+    """
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as tmp:
+        output_path = tmp.name
+
+    try:
+        delay = INITIAL_RETRY_DELAY_SECONDS
+        for attempt in range(1, FIRECRAWL_ATTEMPTS + 1):
+            try:
+                result = subprocess.run(
+                    [
+                        "firecrawl",
+                        "scrape",
+                        url,
+                        "--format",
+                        "markdown,links",
+                        "--only-main-content",
+                        "-o",
+                        output_path,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            except subprocess.TimeoutExpired as exc:
+                if attempt == FIRECRAWL_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Firecrawl timed out scraping the Substack index after {FIRECRAWL_ATTEMPTS} attempts."
+                    ) from exc
+                time.sleep(delay)
