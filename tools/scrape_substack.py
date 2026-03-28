@@ -143,3 +143,26 @@ def parse_articles_from_scrape(scrape_data: dict, substack_url: str) -> list:
         title = text.strip() if text.strip() else slug.replace("-", " ").title()
 
         articles.append({"url": clean_url, "title": title, "slug": slug})
+
+    # Fallback: parse URLs from markdown content
+    if not articles:
+        markdown = scrape_data.get("markdown", "")
+        pattern = r'https://[^/]+/p/([a-z0-9\-]+)'
+        for match in re.finditer(pattern, markdown):
+            full_url = match.group(0).rstrip(")")
+            if not is_allowed_article_url(full_url, substack_url):
+                continue
+
+            parsed = urlparse(full_url)
+            clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+            if clean_url in seen_urls:
+                continue
+            seen_urls.add(clean_url)
+            slug = parsed.path.split("/p/")[-1].rstrip("/")
+            articles.append({
+                "url": clean_url,
+                "title": slug.replace("-", " ").title(),
+                "slug": slug,
+            })
+
+    return articles
