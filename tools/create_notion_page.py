@@ -30,3 +30,21 @@ def is_retryable_notion_error(exc: Exception) -> bool:
     return error_code in {"rate_limited", "service_unavailable", "internal_server_error"}
 
 
+def get_notion_client(api_key: str) -> Client:
+    return Client(auth=api_key)
+
+
+def build_page_properties(summary: dict) -> dict:
+    """
+    Map summary fields to Notion page property schema.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    props = {
+        "Name": {
+            "title": [{"text": {"content": summary["title"][:2000]}}]
+        },
+        "URL": {
+            "url": summary["url"]
+        },
+        "TL;DR": {
