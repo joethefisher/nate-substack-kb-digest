@@ -93,3 +93,28 @@ def build_page_content(summary: dict) -> list:
     })
 
     # Key Takeaways section
+    blocks.append({
+        "object": "block",
+        "type": "heading_2",
+        "heading_2": {
+            "rich_text": [{"type": "text", "text": {"content": "Key Takeaways"}}]
+        },
+    })
+    for takeaway in summary.get("key_takeaways", []):
+        blocks.append({
+            "object": "block",
+            "type": "bulleted_list_item",
+            "bulleted_list_item": {
+                "rich_text": build_rich_text(takeaway)
+            },
+        })
+
+    # Why It Matters section
+    if summary.get("why_it_matters"):
+        blocks.append({
+            "object": "block",
+            "type": "heading_2",
+            "heading_2": {
+                "rich_text": [{"type": "text", "text": {"content": "Why It Matters"}}]
+            },
+        })
