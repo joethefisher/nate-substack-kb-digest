@@ -143,3 +143,20 @@ def build_page_content(summary: dict) -> list:
     })
 
     return blocks
+
+
+def create_notion_page(summary: dict, database_id: str, api_key: str) -> str:
+    """
+    Create a new page in the Notion database.
+    Returns the URL of the created page.
+    """
+    client = get_notion_client(api_key)
+
+    delay = INITIAL_RETRY_DELAY_SECONDS
+    for attempt in range(1, NOTION_ATTEMPTS + 1):
+        try:
+            response = client.pages.create(
+                parent={"database_id": database_id},
+                properties=build_page_properties(summary),
+                children=build_page_content(summary),
+            )
