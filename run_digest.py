@@ -31,3 +31,19 @@ load_dotenv(ENV_FILE)
 SUBSTACK_URL = "https://natesnewsletter.substack.com/"
 
 
+def setup_logging(verbose: bool) -> None:
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(LOG_FILE),
+        ],
+    )
+
+
+def ensure_runtime_dirs() -> None:
+    TMP_DIR.mkdir(exist_ok=True)
+
+
