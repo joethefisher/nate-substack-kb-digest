@@ -103,3 +103,28 @@ def main() -> int:
 
     if args.dry_run:
         log.info("--- DRY RUN MODE: Notion pages will NOT be created ---")
+
+    # Validate environment
+    try:
+        anthropic_key, notion_key, notion_db_id = validate_env(
+            require_notion=not args.dry_run
+        )
+    except EnvironmentError as e:
+        log.error(str(e))
+        return 2
+
+    # Import tools here so env is loaded first
+    from tools.scrape_substack import get_article_list
+    from tools.check_new_articles import (
+        load_processed_state,
+        filter_new_articles,
+        mark_article_processed,
+        save_processed_state,
+    )
+    from tools.summarize_article import summarize_article
+    from tools.create_notion_page import create_notion_page
+
+    try:
+        with acquire_run_lock():
+            # Step 1: Scrape article list
+            log.info(f"Scraping article list from {SUBSTACK_URL}")
