@@ -118,3 +118,28 @@ def build_page_content(summary: dict) -> list:
                 "rich_text": [{"type": "text", "text": {"content": "Why It Matters"}}]
             },
         })
+        blocks.append({
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": build_rich_text(summary["why_it_matters"])
+            },
+        })
+
+    # Divider and source link
+    blocks.append({"object": "block", "type": "divider", "divider": {}})
+    blocks.append({
+        "object": "block",
+        "type": "paragraph",
+        "paragraph": {
+            "rich_text": [
+                {"type": "text", "text": {"content": "Source: "}},
+                {
+                    "type": "text",
+                    "text": {"content": summary["url"], "link": {"url": summary["url"]}},
+                },
+            ]
+        },
+    })
+
+    return blocks
