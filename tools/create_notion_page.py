@@ -17,3 +17,16 @@ def build_rich_text(text: str, chunk_size: int = 2000) -> list[dict]:
     chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)] or [""]
     return [{"type": "text", "text": {"content": chunk}} for chunk in chunks]
 
+
+def is_retryable_notion_error(exc: Exception) -> bool:
+    if isinstance(exc, errors.RequestTimeoutError):
+        return True
+
+    status_code = getattr(exc, "status", None) or getattr(exc, "status_code", None)
+    if status_code in {408, 409, 429, 500, 502, 503, 504}:
+        return True
+
+    error_code = str(getattr(exc, "code", "")).lower()
+    return error_code in {"rate_limited", "service_unavailable", "internal_server_error"}
+
+
