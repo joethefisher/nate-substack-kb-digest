@@ -128,3 +128,23 @@ def main() -> int:
         with acquire_run_lock():
             # Step 1: Scrape article list
             log.info(f"Scraping article list from {SUBSTACK_URL}")
+            try:
+                all_articles = get_article_list(SUBSTACK_URL)
+                log.info(f"Found {len(all_articles)} total articles")
+            except (RuntimeError, ValueError) as e:
+                log.error(f"Failed to scrape Substack index: {e}")
+                return 2
+
+            # Step 2: Filter to new articles
+            state = load_processed_state()
+            new_articles = filter_new_articles(all_articles, state)
+            log.info(f"{len(new_articles)} new article(s) to process")
+
+            if not new_articles:
+                log.info("No new articles. Nothing to do.")
+                return 0
+
+            # Step 3: Process each new article
+            failures = []
+            processed_count = 0
+
