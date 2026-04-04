@@ -86,3 +86,20 @@ def validate_env(require_notion: bool) -> tuple[str, str | None, str | None]:
         required.get("NOTION_DATABASE_ID"),
     )
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Nate's Newsletter digest automation")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Scrape and summarize but skip Notion page creation and state updates",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Verbose logging")
+    args = parser.parse_args()
+
+    ensure_runtime_dirs()
+    setup_logging(args.verbose)
+    log = logging.getLogger(__name__)
+
+    if args.dry_run:
+        log.info("--- DRY RUN MODE: Notion pages will NOT be created ---")
