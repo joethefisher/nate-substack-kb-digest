@@ -198,3 +198,8 @@ def main() -> int:
             return 0 if not failures else 1
     except RuntimeError as e:
         log.error(str(e))
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
