@@ -13,3 +13,15 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+
+# Local AI/editor metadata
+.adal/
+.agent/
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.commandcode/
+.continue/
+.cortex/
+.crush/
