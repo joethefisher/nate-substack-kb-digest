@@ -101,3 +101,9 @@ tools/create_notion_page.py   Builds and creates Notion pages
 workflows/substack_digest.md  Human-readable operating notes for the workflow
 ```
 
+## Operational Behavior
+
+- Processed URLs are stored in `.tmp/processed_articles.json`
+- Logs are written to `.tmp/digest.log`
+- Paywalled or failed articles are skipped and retried on the next run
+- State is only updated after a Notion page is successfully created
