@@ -48,3 +48,18 @@ Note: the script resolves `.env` and `.tmp` relative to the repository root, so 
 Note: Task only runs while your computer is awake and Claude Desktop is open. If skipped, Cowork will run it automatically when the app is reopened.
 
 ## Tool Execution Sequence
+
+1. **`tools/scrape_substack.py`** — Calls `firecrawl scrape` on the Substack index. Extracts all article URLs matching the `/p/` path pattern.
+2. **`tools/check_new_articles.py`** — Loads `.tmp/processed_articles.json`. Filters out already-processed URLs.
+3. **`tools/summarize_article.py`** — For each new article: calls `firecrawl scrape` for full content, then sends to Claude API. Returns TL;DR + Key Takeaways + Why It Matters.
+4. **`tools/create_notion_page.py`** — Creates a Notion page with the summary. Returns the page URL.
+5. State is saved after each successfully created page.
+
+## Expected Outputs
+
+- New Notion pages in "Nate's Newsletter Digest" database
+- Updated `.tmp/processed_articles.json` with processed URLs
+- Log output at `.tmp/digest.log`
+
+## Notion Database Schema
+
