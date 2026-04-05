@@ -52,3 +52,6 @@ CLAUDE.md
 skills/
 skills-lock.json
 tools/Screenshot*.png
+
+# macOS
+.DS_Store
