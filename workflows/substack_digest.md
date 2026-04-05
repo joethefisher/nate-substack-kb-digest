@@ -78,3 +78,18 @@ Each page body contains: TL;DR section, Key Takeaways (bullets), Why It Matters 
 
 - **Paywalled articles**: If scraped content is < 200 characters, the article is skipped with a warning. It is NOT marked as processed and will be retried next run (in case the issue was transient).
 - **Scrape failures**: If the Firecrawl scrape of an individual article fails, it is logged and skipped. The index scrape failing causes an immediate exit (nothing is safe to process).
+- **Partial run crash**: State is saved after each article individually. A crash mid-run only loses the article currently being processed — all others are correctly recorded.
+- **Substack structure change**: If `scrape_substack.py` returns 0 articles, it raises a ValueError with a clear message. Update `parse_articles_from_scrape()` in that file to match the new structure.
+- **State file missing/corrupted**: `load_processed_state()` initializes fresh state (safe default — will re-process all articles, creating duplicate Notion pages for old articles, but won't miss anything).
+- **Rate limits**: Claude API handles retries internally. Notion API is generous for this volume (1-5 pages/day).
+
+## Maintenance
+
+- If article summaries are poor quality: refine the `SUMMARY_PROMPT` in `tools/summarize_article.py`
+- If Firecrawl runs out of credits: check balance with `firecrawl credit-usage`; consider using `--only-main-content` flag more aggressively
+- If Notion API key expires: generate a new one at notion.so/my-integrations and update `.env`
+- Log rotation: `.tmp/digest.log` grows unbounded. Manually clear it or add logrotate config.
+
+## Setup Checklist (first-time only)
+
+- [ ] `python3 -m venv .venv`
