@@ -178,3 +178,23 @@ def main() -> int:
                     except Exception as e:
                         log.error(f"  Notion page creation failed: {e}")
                         failures.append({"url": url, "reason": str(e)})
+                        # Do NOT mark as processed — will retry next run
+                        continue
+
+                    # Save state after each successful page creation
+                    state = mark_article_processed(url, state)
+                    save_processed_state(state)
+
+                processed_count += 1
+
+            # Summary
+            log.info(
+                f"Done. Processed: {processed_count}, Failed/Skipped: {len(failures)}"
+            )
+            if failures:
+                for f in failures:
+                    log.warning(f"  SKIPPED: {f['url']} — {f['reason']}")
+
+            return 0 if not failures else 1
+    except RuntimeError as e:
+        log.error(str(e))
