@@ -28,3 +28,23 @@ Note: the script resolves `.env` and `.tmp` relative to the repository root, so 
 1. Open Claude Desktop → Cowork → click "Scheduled" in the sidebar
 2. Create a new scheduled task with:
    - **Name:** Nate's Newsletter Digest
+   - **Description:** Scrapes natesnewsletter.substack.com for new articles, summarizes each with Claude, and saves them to the Nate's Newsletter Digest database in Notion.
+   - **Cadence:** Daily
+   - **Working folder:** `/Users/joe/code/Nate Substack Digest`
+   - **Prompt:**
+     ```
+     Run the Nate's Newsletter Substack digest.
+
+     Working directory: /Users/joe/code/Nate Substack Digest
+
+     Run this command:
+     ./.venv/bin/python run_digest.py --verbose
+
+     If it exits with code 0: report how many articles were processed and their titles.
+     If it exits with code 1: report which articles were skipped and why — these may be paywalled.
+     If it exits with code 2: something critical failed (scrape or missing credentials). Show the full error output so I can investigate.
+     ```
+
+Note: Task only runs while your computer is awake and Claude Desktop is open. If skipped, Cowork will run it automatically when the app is reopened.
+
+## Tool Execution Sequence
