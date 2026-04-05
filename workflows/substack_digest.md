@@ -63,3 +63,18 @@ Note: Task only runs while your computer is awake and Claude Desktop is open. If
 
 ## Notion Database Schema
 
+| Property | Type | Notes |
+|---|---|---|
+| Name | Title | Article title |
+| URL | URL | Full Substack article URL |
+| TL;DR | Rich Text | 1-2 sentence summary (visible in database view) |
+| Status | Select | Unread / Reading / Done |
+| Added | Date | Date the automation ran |
+| Tags | Multi-select | Manually populated by user |
+
+Each page body contains: TL;DR section, Key Takeaways (bullets), Why It Matters paragraph, divider, and source link.
+
+## Edge Cases and Known Behaviors
+
+- **Paywalled articles**: If scraped content is < 200 characters, the article is skipped with a warning. It is NOT marked as processed and will be retried next run (in case the issue was transient).
+- **Scrape failures**: If the Firecrawl scrape of an individual article fails, it is logged and skipped. The index scrape failing causes an immediate exit (nothing is safe to process).
