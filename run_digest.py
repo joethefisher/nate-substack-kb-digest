@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-Nate's Newsletter Substack Digest
-Scrapes new articles from natesnewsletter.substack.com,
-summarizes each with Claude, and creates Notion pages.
+Nate's Newsletter → KB Digest
+
+Scrapes new articles from natesnewsletter.substack.com, summarizes each with
+Claude, writes a KB entry (summary + full article body) into the shared vault
+at <VAULT>/kb/raw/nate-substack/<slug>.md, and pushes the vault remote so the
+new files are visible to Kai and any other vault clone.
 
 Usage:
-    python3 run_digest.py              # normal run
-    python3 run_digest.py --dry-run    # scrape + summarize but skip Notion writes
-    python3 run_digest.py --verbose    # extra logging
+    python3 run_digest.py                  # process all not-yet-in-vault articles
+    python3 run_digest.py --limit 3        # cap at N new articles (smoke testing)
+    python3 run_digest.py --dry-run        # scrape + summarize, but skip writes
+    python3 run_digest.py --no-push        # write to vault, skip git push
+    python3 run_digest.py --verbose        # debug logging
 """
 
 import argparse
@@ -16,6 +21,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -62,37 +68,53 @@ def acquire_run_lock():
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
-def validate_env(require_notion: bool) -> tuple[str, str | None, str | None]:
+def validate_env() -> tuple[str, Path]:
     """
-    Check required env vars are present. Returns (anthropic_key, notion_key, db_id).
-    Raises EnvironmentError listing missing vars.
+    Check required env vars. Returns (anthropic_key, vault_path).
+    Raises EnvironmentError listing missing/invalid vars.
     """
-    required = {
-        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
-    }
-    if require_notion:
-        required["NOTION_API_KEY"] = os.getenv("NOTION_API_KEY")
-        required["NOTION_DATABASE_ID"] = os.getenv("NOTION_DATABASE_ID")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    vault_raw = os.getenv("VAULT_PATH")
 
-    missing = [k for k, v in required.items() if not v]
+    missing = []
+    if not anthropic_key:
+        missing.append("ANTHROPIC_API_KEY")
+    if not vault_raw:
+        missing.append("VAULT_PATH")
     if missing:
         raise EnvironmentError(
             f"Missing required environment variables: {', '.join(missing)}\n"
             "Please add them to your .env file."
         )
-    return (
-        required["ANTHROPIC_API_KEY"],
-        required.get("NOTION_API_KEY"),
-        required.get("NOTION_DATABASE_ID"),
-    )
+
+    vault_path = Path(vault_raw).expanduser().resolve()
+    if not vault_path.is_dir():
+        raise EnvironmentError(f"VAULT_PATH does not exist: {vault_path}")
+    if not (vault_path / ".git").is_dir():
+        raise EnvironmentError(f"VAULT_PATH is not a git repo: {vault_path}")
+
+    return anthropic_key, vault_path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Nate's Newsletter digest automation")
+    parser = argparse.ArgumentParser(
+        description="Nate's Newsletter → KB digest automation"
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Scrape and summarize but skip Notion page creation and state updates",
+        help="Scrape + summarize but skip KB writes and git ops",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Cap the number of new articles to process this run (smoke testing)",
+    )
+    parser.add_argument(
+        "--no-push",
+        action="store_true",
+        help="Write KB entries but skip the vault git ops (commit + push)",
     )
     parser.add_argument("--verbose", action="store_true", help="Verbose logging")
     args = parser.parse_args()
@@ -102,31 +124,28 @@ def main() -> int:
     log = logging.getLogger(__name__)
 
     if args.dry_run:
-        log.info("--- DRY RUN MODE: Notion pages will NOT be created ---")
+        log.info("--- DRY RUN MODE: no KB writes, no git ops ---")
 
-    # Validate environment
     try:
-        anthropic_key, notion_key, notion_db_id = validate_env(
-            require_notion=not args.dry_run
-        )
+        anthropic_key, vault_path = validate_env()
     except EnvironmentError as e:
         log.error(str(e))
         return 2
 
-    # Import tools here so env is loaded first
+    log.info(f"Vault: {vault_path}")
+
+    # Defer tool imports until env is loaded
     from tools.scrape_substack import get_article_list
-    from tools.check_new_articles import (
-        load_processed_state,
-        filter_new_articles,
-        mark_article_processed,
-        save_processed_state,
-    )
+    from tools.check_new_articles import filter_new_articles
     from tools.summarize_article import summarize_article
-    from tools.create_notion_page import create_notion_page
+    from tools.create_kb_entry import (
+        write_kb_entry,
+        run_vault_git_ops,
+        kb_entry_path,
+    )
 
     try:
         with acquire_run_lock():
-            # Step 1: Scrape article list
             log.info(f"Scraping article list from {SUBSTACK_URL}")
             try:
                 all_articles = get_article_list(SUBSTACK_URL)
@@ -135,18 +154,20 @@ def main() -> int:
                 log.error(f"Failed to scrape Substack index: {e}")
                 return 2
 
-            # Step 2: Filter to new articles
-            state = load_processed_state()
-            new_articles = filter_new_articles(all_articles, state)
+            new_articles = filter_new_articles(all_articles, vault_path)
             log.info(f"{len(new_articles)} new article(s) to process")
+
+            if args.limit is not None and len(new_articles) > args.limit:
+                log.info(f"Limiting to first {args.limit} article(s) per --limit")
+                new_articles = new_articles[: args.limit]
 
             if not new_articles:
                 log.info("No new articles. Nothing to do.")
                 return 0
 
-            # Step 3: Process each new article
             failures = []
             processed_count = 0
+            written_paths = []
 
             for article in new_articles:
                 url = article["url"]
@@ -154,9 +175,9 @@ def main() -> int:
                 log.info(f"Processing: {title}")
                 log.debug(f"  URL: {url}")
 
-                # Summarize
                 try:
                     summary = summarize_article(url, title, anthropic_key)
+                    full_text = summary.pop("full_content")
                     log.info("  Summarized OK")
                     log.debug(f"  TL;DR: {summary['tldr'][:120]}...")
                 except ValueError as e:
@@ -168,26 +189,33 @@ def main() -> int:
                     failures.append({"url": url, "reason": str(e)})
                     continue
 
-                # Create Notion page
                 if args.dry_run:
-                    log.info(f"  [DRY RUN] Would create Notion page: {summary['title']}")
+                    target = kb_entry_path(url, vault_path)
+                    log.info(f"  [DRY RUN] Would write: {target}")
                 else:
                     try:
-                        page_url = create_notion_page(summary, notion_db_id, notion_key)
-                        log.info(f"  Notion page created: {page_url}")
+                        written = write_kb_entry(summary, full_text, vault_path)
+                        log.info(f"  Wrote KB entry: {written}")
+                        written_paths.append(written)
                     except Exception as e:
-                        log.error(f"  Notion page creation failed: {e}")
+                        log.error(f"  KB write failed: {e}")
                         failures.append({"url": url, "reason": str(e)})
-                        # Do NOT mark as processed — will retry next run
                         continue
-
-                    # Save state after each successful page creation
-                    state = mark_article_processed(url, state)
-                    save_processed_state(state)
 
                 processed_count += 1
 
-            # Summary
+            if not args.dry_run and not args.no_push and written_paths:
+                commit_msg = (
+                    f"feat(kb): nate-substack digest "
+                    f"({datetime.now().strftime('%Y-%m-%d %H:%M')}) — "
+                    f"{len(written_paths)} new article(s)"
+                )
+                try:
+                    run_vault_git_ops(vault_path, commit_msg, log)
+                except Exception as e:
+                    log.error(f"Vault git ops failed: {e}")
+                    return 1
+
             log.info(
                 f"Done. Processed: {processed_count}, Failed/Skipped: {len(failures)}"
             )

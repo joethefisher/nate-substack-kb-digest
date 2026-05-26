@@ -320,5 +320,6 @@ def summarize_article(url: str, title: str, api_key: str) -> dict:
         "title": parsed.get("generated_title") or article_title,
         "published_date": extract_publish_date(content),
         "youtube_url": extract_youtube_url(content),
+        "full_content": content,
         **parsed,
     }

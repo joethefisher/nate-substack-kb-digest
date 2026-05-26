@@ -1,106 +1,64 @@
-# Workflow: Nate's Newsletter Substack → Notion Digest
+# Workflow: Nate's Newsletter Substack → KB Digest
 
 ## Objective
-Automatically scrape new articles from natesnewsletter.substack.com daily, summarize each using Claude, and create structured Notion pages for easy reading.
 
-## Required Inputs
-- `ANTHROPIC_API_KEY` — Claude API key (in `.env`)
-- `NOTION_API_KEY` — Notion integration secret (required for non-dry runs)
-- `NOTION_DATABASE_ID` — Target Notion database ID (required for non-dry runs)
-- Firecrawl CLI authenticated (already done — run `firecrawl credit-usage` to verify)
+Daily, scrape new articles from `natesnewsletter.substack.com`, summarize each with Claude, and write a markdown KB entry (summary + full article body) into the shared vault at `<VAULT>/kb/raw/nate-substack/<slug>.md`. Push the vault so new entries are visible to Kai immediately.
 
-## Execution
+## Inputs
 
-### Manual run
-```bash
-cd "/Users/joe/code/Nate Substack Digest"
-./.venv/bin/python run_digest.py --verbose
-```
+- `natesnewsletter.substack.com/` — index page, scraped via Firecrawl CLI.
+- `ANTHROPIC_API_KEY` — for summarization.
+- `VAULT_PATH` — local clone of the shared knowledge vault.
 
-### Dry run (no Notion writes)
-```bash
-./.venv/bin/python run_digest.py --dry-run
-```
+## Outputs
 
-Note: the script resolves `.env` and `.tmp` relative to the repository root, so it can be launched from any working directory.
+- One markdown file per new article at `<VAULT>/kb/raw/nate-substack/<slug>.md` containing:
+  - YAML frontmatter (source, publication, author, dates, tags)
+  - Title + source link
+  - TL;DR
+  - Key Takeaways (bulleted)
+  - Why It Matters
+  - Tags
+  - Full article body (verbatim from Firecrawl)
+- One git commit + push per run with N new entries.
 
-### Automated (Cowork scheduled task in Claude Desktop)
-1. Open Claude Desktop → Cowork → click "Scheduled" in the sidebar
-2. Create a new scheduled task with:
-   - **Name:** Nate's Newsletter Digest
-   - **Description:** Scrapes natesnewsletter.substack.com for new articles, summarizes each with Claude, and saves them to the Nate's Newsletter Digest database in Notion.
-   - **Cadence:** Daily
-   - **Working folder:** `/Users/joe/code/Nate Substack Digest`
-   - **Prompt:**
-     ```
-     Run the Nate's Newsletter Substack digest.
+## State
 
-     Working directory: /Users/joe/code/Nate Substack Digest
+The vault is the state. An article is "processed" iff its KB entry file exists in `<VAULT>/kb/raw/nate-substack/`. No separate JSON file.
 
-     Run this command:
-     ./.venv/bin/python run_digest.py --verbose
+## Tools used
 
-     If it exits with code 0: report how many articles were processed and their titles.
-     If it exits with code 1: report which articles were skipped and why — these may be paywalled.
-     If it exits with code 2: something critical failed (scrape or missing credentials). Show the full error output so I can investigate.
-     ```
+- `tools/scrape_substack.py` — Substack index → list of article URLs
+- `tools/check_new_articles.py` — filter to URLs not yet in vault
+- `tools/summarize_article.py` — scrape body + Claude summary
+- `tools/create_kb_entry.py` — write markdown + run vault git ops
 
-Note: Task only runs while your computer is awake and Claude Desktop is open. If skipped, Cowork will run it automatically when the app is reopened.
+## Process
 
-## Tool Execution Sequence
+1. Acquire `.tmp/digest.lock` (skip if another run in progress).
+2. Scrape Substack index → list of `{url, title, slug}`.
+3. Filter to URLs not yet in vault.
+4. For each new article:
+   a. Scrape full content + summarize via Claude.
+   b. Skip if content too short (< 200 chars — likely paywalled).
+   c. Write `<VAULT>/kb/raw/nate-substack/<slug>.md` atomically (temp file + rename).
+5. After all writes, run vault git ops: pull --rebase → add → commit (if changes) → push.
+6. Log summary, return exit code (0 success / 1 partial / 2 env error).
 
-1. **`tools/scrape_substack.py`** — Calls `firecrawl scrape` on the Substack index. Extracts all article URLs matching the `/p/` path pattern.
-2. **`tools/check_new_articles.py`** — Loads `.tmp/processed_articles.json`. Filters out already-processed URLs.
-3. **`tools/summarize_article.py`** — For each new article: calls `firecrawl scrape` for full content, then sends to Claude API. Returns TL;DR + Key Takeaways + Why It Matters.
-4. **`tools/create_notion_page.py`** — Creates a Notion page with the summary. Returns the page URL.
-5. State is saved after each successfully created page.
+## Edge cases
 
-## Expected Outputs
+- **Paywalled article:** content shorter than `MIN_CONTENT_LENGTH = 200` → skip, log warning, will retry next run (file isn't created so won't be marked as processed).
+- **Firecrawl transient failure:** 3 retries with exponential backoff.
+- **Anthropic transient failure:** 3 retries with exponential backoff on connection/timeout/rate-limit/5xx.
+- **Git pull conflict:** logged as warning, continue (commit may then fail on push — surface in exit code).
+- **Overlapping runs:** prevented by `fcntl.flock`.
 
-- New Notion pages in "Nate's Newsletter Digest" database
-- Updated `.tmp/processed_articles.json` with processed URLs
-- Log output at `.tmp/digest.log`
+## Scheduling
 
-## Notion Database Schema
+macOS launchd, daily 06:00 PT — `~/Library/LaunchAgents/com.joefisher.substack-kb-digest.plist`.
 
-| Property | Type | Notes |
-|---|---|---|
-| Name | Title | Article title |
-| URL | URL | Full Substack article URL |
-| TL;DR | Rich Text | 1-2 sentence summary (visible in database view) |
-| Status | Select | Unread / Reading / Done |
-| Added | Date | Date the automation ran |
-| Tags | Multi-select | Manually populated by user |
+## Related
 
-Each page body contains: TL;DR section, Key Takeaways (bullets), Why It Matters paragraph, divider, and source link.
-
-## Edge Cases and Known Behaviors
-
-- **Paywalled articles**: If scraped content is < 200 characters, the article is skipped with a warning. It is NOT marked as processed and will be retried next run (in case the issue was transient).
-- **Scrape failures**: If the Firecrawl scrape of an individual article fails, it is logged and skipped. The index scrape failing causes an immediate exit (nothing is safe to process).
-- **Partial run crash**: State is saved after each article individually. A crash mid-run only loses the article currently being processed — all others are correctly recorded.
-- **Substack structure change**: If `scrape_substack.py` returns 0 articles, it raises a ValueError with a clear message. Update `parse_articles_from_scrape()` in that file to match the new structure.
-- **State file missing/corrupted**: `load_processed_state()` initializes fresh state (safe default — will re-process all articles, creating duplicate Notion pages for old articles, but won't miss anything).
-- **Rate limits**: Claude API handles retries internally. Notion API is generous for this volume (1-5 pages/day).
-
-## Maintenance
-
-- If article summaries are poor quality: refine the `SUMMARY_PROMPT` in `tools/summarize_article.py`
-- If Firecrawl runs out of credits: check balance with `firecrawl credit-usage`; consider using `--only-main-content` flag more aggressively
-- If Notion API key expires: generate a new one at notion.so/my-integrations and update `.env`
-- Log rotation: `.tmp/digest.log` grows unbounded. Manually clear it or add logrotate config.
-
-## Setup Checklist (first-time only)
-
-- [ ] `python3 -m venv .venv`
-- [ ] `./.venv/bin/pip install -r requirements.txt`
-- [ ] Add `ANTHROPIC_API_KEY` to `.env`
-- [ ] Create Notion integration at notion.so/my-integrations
-- [ ] Add `NOTION_API_KEY` to `.env`
-- [ ] Create "Nate's Newsletter Digest" database in Notion with schema above
-- [ ] Share the database with the Notion integration (Share → Invite → select your integration)
-- [ ] Copy database ID from URL → add as `NOTION_DATABASE_ID` in `.env`
-- [ ] Test: `./.venv/bin/python run_digest.py --dry-run`
-- [ ] Full test: `./.venv/bin/python run_digest.py --verbose`
-- [ ] Validation: `./.venv/bin/python -m unittest discover -s tests -v`
-- [ ] Create Cowork scheduled task in Claude Desktop (see Automated section above)
+- Vault project record: `[[substack-digest]]` in `<VAULT>/kai/projects/`.
+- Migration plan: `[[substack-kb-digest-migration]]`.
+- Wiki topic destination (for synthesis): `kb/wiki/agentic/news/`.
