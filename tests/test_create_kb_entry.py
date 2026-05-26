@@ -11,7 +11,6 @@ from tools.create_kb_entry import (
     already_in_vault,
     build_kb_markdown,
     get_vault_path,
-    kb_entry_path,
     run_vault_git_ops,
     slug_from_url,
     write_kb_entry,
